@@ -5,7 +5,10 @@ enum CommandTypes {
     Declare
     Let
     Print
-    Input    
+    Input
+    PushD
+    PopD
+    Save
 }
 
 enum ExpressionsType {
@@ -34,14 +37,14 @@ Function ConvertTo-FoldersCommand() {
         [parameter(ParameterSetName="Recurse")][switch]$Recurse,
         [parameter(ParameterSetName="Basic")][switch]$NoRecurse
     )
-    
+
     Process {
         If ($Recurse) {
-            $Folder | Add-Member -Force ScriptProperty SubFolders { $this | Get-ChildItem -Directory | Sort-Object Name | ConvertTo-FoldersCommand -Recurse } 
+            $Folder | Add-Member -Force ScriptProperty SubFolders { $this | Get-ChildItem -Directory | Sort-Object Name | ConvertTo-FoldersCommand -Recurse }
         } elseIf ($NoRecurse) {
-            $Folder | Add-Member -Force ScriptProperty SubFolders { $this | Get-ChildItem -Directory | Sort-Object Name } 
+            $Folder | Add-Member -Force ScriptProperty SubFolders { $this | Get-ChildItem -Directory | Sort-Object Name }
         } else {
-            $Folder | Add-Member -Force ScriptProperty SubFolders { $this | Get-ChildItem -Directory | Sort-Object Name | ConvertTo-FoldersCommand -NoRecurse } 
+            $Folder | Add-Member -Force ScriptProperty SubFolders { $this | Get-ChildItem -Directory | Sort-Object Name | ConvertTo-FoldersCommand -NoRecurse }
         }
         $Folder | Add-Member -Force ScriptProperty CommandType { [CommandTypes]($this.SubFolders.Count-1) }
         $Folder | Add-Member -Force ScriptProperty ExpressionType { [ExpressionsType]($this.SubFolders.Count-1) }
@@ -58,19 +61,22 @@ Function Start-FoldersCommand() {
     )
 
     Process {
-        $Folder = $Folder | ConvertTo-FoldersCommand 
-        write-host $Folder.SubFolders[0].CommandType
+        $Folder = $Folder | ConvertTo-FoldersCommand
+        write-Debug $Folder.SubFolders[0].CommandType
         switch ($Folder.SubFolders[0].CommandType) {
             'If' { }
             'While' { }
             'Declare' { }
             'Let' { }
             'Print' { Write-Output (Get-FoldersExpression $Folder.SubFolders[1]) }
-            'Input' { }    
+            'Input' { }
+            'PushD' { }
+            'PopD' { }
+            'Save' { }
         }
     }
     End {
-        
+
     }
 }
 
@@ -81,8 +87,8 @@ Function Get-FoldersExpression() {
     )
 
     Process {
-        $Folder = $Folder | ConvertTo-FoldersCommand 
-        Write-Host $FOlder.SubFolders[0].ExpressionType
+        $Folder = $Folder | ConvertTo-FoldersCommand
+        Write-Debug $FOlder.SubFolders[0].ExpressionType
         switch ($Folder.SubFolders[0].ExpressionType) {
             'Variable' { }
             'Add' { }
@@ -90,8 +96,7 @@ Function Get-FoldersExpression() {
             'Multiply' { }
             'Divide' { }
             'Literal' {
-                $FolderValue = Get-FoldersValue -Folder $Folder.SubFolders[2] -ByType $Folder.SubFolders[1].TypesType
-                return $FolderValue
+                return Get-FoldersValue -Folder $Folder.SubFolders[2] -ByType $Folder.SubFolders[1].TypesType
             }
             'Equal' { }
             'Greater' { }
