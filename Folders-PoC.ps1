@@ -30,6 +30,8 @@ enum TypesTypes {
     char
 }
 
+$Variables = @{}
+
 Function ConvertTo-FoldersCommand() {
     [CmdletBinding(DefaultParameterSetName="Basic")]
     param(
@@ -64,12 +66,14 @@ Function Start-FoldersCommand() {
         $Folder = $Folder | ConvertTo-FoldersCommand
         write-Debug $Folder.SubFolders[0].CommandType
         switch ($Folder.SubFolders[0].CommandType) {
-            'If' { }
+            'If' { if (Get-FoldersExpression $Folder.SubFolders[1]) {
+                    Start-FoldersCommand (Get-FoldersExpression $Folder.SubFolders[2])
+                } }
             'While' { }
-            'Declare' { }
-            'Let' { }
+            'Declare' { Set-FoldersVariable $Folder.SubFolders[2] -Value $null  }
+            'Let' { Set-FoldersVariable $Folder.SubFolders[1] -Value (Get-FoldersExpression $Folder.SubFolders[2]) }
             'Print' { Write-Output (Get-FoldersExpression $Folder.SubFolders[1]) }
-            'Input' { }
+            'Input' { Set-FoldersVariable $Folder.SubFolders[1] -Value (Read-Host -Prompt "Enter value:") }
             'PushD' { }
             'PopD' { }
             'Save' { }
@@ -90,17 +94,17 @@ Function Get-FoldersExpression() {
         $Folder = $Folder | ConvertTo-FoldersCommand
         Write-Debug $FOlder.SubFolders[0].ExpressionType
         switch ($Folder.SubFolders[0].ExpressionType) {
-            'Variable' { }
-            'Add' { }
-            'Subtract' { }
-            'Multiply' { }
-            'Divide' { }
+            'Variable' { Get-FoldersVariable $Folders.SubFolder[1] }
+            'Add' { return (Get-FoldersExpression $Folder.SubFolders[1]) + (Get-FoldersExpression $Folder.SubFolders[2]) }
+            'Subtract' { return (Get-FoldersExpression $Folder.SubFolders[1]) - (Get-FoldersExpression $Folder.SubFolders[2]) }
+            'Multiply' { return (Get-FoldersExpression $Folder.SubFolders[1]) * (Get-FoldersExpression $Folder.SubFolders[2]) }
+            'Divide' { return (Get-FoldersExpression $Folder.SubFolders[1]) / (Get-FoldersExpression $Folder.SubFolders[2]) }
             'Literal' {
                 return Get-FoldersValue -Folder $Folder.SubFolders[2] -ByType $Folder.SubFolders[1].TypesType
             }
-            'Equal' { }
-            'Greater' { }
-            'Less' { }
+            'Equal' { return (Get-FoldersExpression $Folder.SubFolders[1]) -eq (Get-FoldersExpression $Folder.SubFolders[2]) }
+            'Greater' { return (Get-FoldersExpression $Folder.SubFolders[1]) -gt (Get-FoldersExpression $Folder.SubFolders[2]) }
+            'Less' { return (Get-FoldersExpression $Folder.SubFolders[1]) -lt (Get-FoldersExpression $Folder.SubFolders[2]) }
         }
     }
 
@@ -150,5 +154,31 @@ Function Get-FoldersBinValue() {
 
     Process {
         ($Folder.SubFolders | ForEach-Object { $_.SubFolders.Count } ) -join ''
+    }
+}
+
+
+Function Set-FoldersVariable() {
+    [CmdletBinding()]
+    param(
+        [parameter(ValueFromPipeline=$true,Mandatory=$true)][System.IO.DirectoryInfo]$Folder,
+        $Value
+    )
+
+    Process {
+        $Folder = $Folder | ConvertTo-FoldersCommand -Recurse
+        $Variables.("Var{0}" -f $Folder.SubFolders.Count) = $Value
+    }
+}
+
+Function Get-FoldersVariable() {
+    [CmdletBinding()]
+    param(
+        [parameter(ValueFromPipeline=$true,Mandatory=$true)][System.IO.DirectoryInfo]$Folder
+    )
+
+    Process {
+        $Folder = $Folder | ConvertTo-FoldersCommand -Recurse
+        return $Variables.("Var{0}" -f $Folder.SubFolders.Count)
     }
 }
