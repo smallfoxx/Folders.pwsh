@@ -124,10 +124,12 @@ Function Get-FoldersValue() {
         $binBytes = $Folder.SubFolders | Get-FoldersByteValue
         switch ($ByType) {
             int {
-                $binBytes | ForEach-Object { [convert]::toInt16($_,16) }
+                $bytes = $binBytes | ForEach-Object { [int]("0x$_") }
+                [convert]::toInt32($bytes,0) 
             }
             float {
-                $binBytes | ForEach-Object { [convert]::ToSingle($_,16) } 
+                $bytes = $binBytes | ForEach-Object { [int]("0x$_") }
+                [convert]::ToSingle($bytes,0) 
             }
             string {
                 ($binBytes | ForEach-Object { [char][convert]::toInt16($_,16) }) -join ''
