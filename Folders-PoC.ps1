@@ -69,7 +69,9 @@ Function Start-FoldersCommand() {
             'If' { if (Get-FoldersExpression $Folder.SubFolders[1]) {
                     Start-FoldersCommand (Get-FoldersExpression $Folder.SubFolders[2])
                 } }
-            'While' { }
+            'While' { While (Get-FoldersExpression $Folder.SubFolders[1]) {
+                    Start-FoldersCommand (Get-FoldersExpression $Folder.SubFolders[2])
+                } }
             'Declare' { Set-FoldersVariable $Folder.SubFolders[2] -Value $null  }
             'Let' { Set-FoldersVariable $Folder.SubFolders[1] -Value (Get-FoldersExpression $Folder.SubFolders[2]) }
             'Print' { Write-Output (Get-FoldersExpression $Folder.SubFolders[1]) }
@@ -121,6 +123,12 @@ Function Get-FoldersValue() {
         $Folder = $Folder | ConvertTo-FoldersCommand -Recurse
         $binBytes = $Folder.SubFolders | Get-FoldersByteValue
         switch ($ByType) {
+            int {
+                $binBytes | ForEach-Object { [convert]::toInt16($_,16) }
+            }
+            float {
+                $binBytes | ForEach-Object { [convert]::ToSingle($_,16) } 
+            }
             string {
                 ($binBytes | ForEach-Object { [char][convert]::toInt16($_,16) }) -join ''
             }
