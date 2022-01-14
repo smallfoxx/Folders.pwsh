@@ -59,26 +59,34 @@ Function ConvertTo-FoldersCommand() {
 Function Start-FoldersCommand() {
     [CmdletBinding()]
     param(
-        [parameter(ValueFromPipeline=$true)][System.IO.DirectoryInfo]$Folder=(Get-Item ".")
+        [parameter(ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)][System.IO.DirectoryInfo]$Folder=(Get-Item "."),
+        [parameter(ValueFromPipelineByPropertyName=$true)]$BaseFolder=$Folder
     )
 
     Process {
         $Folder = $Folder | ConvertTo-FoldersCommand
+        $BaseFolder = $BaseFolder | ConvertTo-FoldersCommand
         write-Debug $Folder.SubFolders[0].CommandType
         switch ($Folder.SubFolders[0].CommandType) {
             'If' { if (Get-FoldersExpression $Folder.SubFolders[1]) {
-                    Start-FoldersCommand (Get-FoldersExpression $Folder.SubFolders[2])
+                    Start-FoldersCommand -Folder (Get-FoldersExpression $Folder.SubFolders[2]) -BaseFolder $BaseFolder
                 } }
             'While' { While (Get-FoldersExpression $Folder.SubFolders[1]) {
-                    Start-FoldersCommand (Get-FoldersExpression $Folder.SubFolders[2])
+                    Start-FoldersCommand -Folder (Get-FoldersExpression $Folder.SubFolders[2]) -BaseFolder $BaseFolder
                 } }
             'Declare' { Set-FoldersVariable $Folder.SubFolders[2] -Value $null  }
             'Let' { Set-FoldersVariable $Folder.SubFolders[1] -Value (Get-FoldersExpression $Folder.SubFolders[2]) }
             'Print' { Write-Output (Get-FoldersExpression $Folder.SubFolders[1]) }
             'Input' { Set-FoldersVariable $Folder.SubFolders[1] -Value (Read-Host -Prompt "Enter value:") }
-            'PushD' { }
-            'PopD' { }
-            'Save' { }
+            'PushD' { 
+                Push-Location -StackName $PID -Path $BaseFolder.SubFolders[(Get-FoldersExpression $Folder.SubFolders[1])] 
+                $BaseFolder = Get-Item $pwd | ConvertTo-FolderCommand
+            }
+            'PopD' {
+                Pop-Location -StackName $PID
+                $BaseFolder = Get-Item $pwd | ConvertTo-FolderCommand
+            }
+            'Save' { Set-FoldersValue $Folder.SubFolders[1] }
         }
     }
     End {
@@ -112,7 +120,7 @@ Function Get-FoldersExpression() {
 
 }
 
-Function Get-FoldersValue() {
+Function Set-FoldersValue() {
     [CmdletBinding()]
     param(
         [parameter(ValueFromPipeline=$true,Mandatory=$true)][System.IO.DirectoryInfo]$Folder,
@@ -124,8 +132,10 @@ Function Get-FoldersValue() {
         $binBytes = $Folder.SubFolders | Get-FoldersByteValue
         switch ($ByType) {
             int {
+                $hex = "{0:x}" -f ($Variables.("Var{0}" -f $Folder.SubFolders.Count))
+                Set-FoldersByteValue $hex
                 $bytes = $binBytes | ForEach-Object { [int]("0x$_") }
-                [convert]::toInt32($bytes,0) 
+                [convert]::toInt32($bytes,0)  
             }
             float {
                 $bytes = $binBytes | ForEach-Object { [int]("0x$_") }
@@ -141,6 +151,66 @@ Function Get-FoldersValue() {
     }
 }
 
+Function Get-FoldersValue() {
+    [CmdletBinding()]
+    param(
+        [parameter(ValueFromPipeline=$true,Mandatory=$true)][System.IO.DirectoryInfo]$Folder,
+        [string]$ByType
+    )
+
+    Process {
+        $Folder = $Folder | ConvertTo-FoldersCommand -Recurse
+        $binBytes = $Folder.SubFolders | Get-FoldersByteValue
+        switch ($ByType) {
+            int {
+                $bytes = $binBytes | ForEach-Object { [int]("0x$_") }
+                [convert]::toInt32($bytes,0)  
+            }
+            float {
+                $bytes = $binBytes | ForEach-Object { [int]("0x$_") }
+                [convert]::ToSingle($bytes,0) 
+            }
+            string {
+                ($binBytes | ForEach-Object { [char][convert]::toInt16($_,16) }) -join ''
+            }
+            char {
+                $binBytes | ForEach-Object { [char][convert]::toInt16($_,16) }
+            }
+        }
+    }
+}
+
+Function ConvertFrom-HexToBytes() {
+    param([string]$Hexadecimal)
+
+    $Hexadecimal -split "(\w{2})" | Where-Object { $_ } | ForEach-Object { [convert]::ToByte($_, 16) }
+
+}
+
+Function Set-FoldersByteValue() {
+    [CmdletBinding()]
+    param(
+        [parameter(ValueFromPipeline=$true,Mandatory=$true)][System.IO.DirectoryInfo]$Folder,
+        [parameter(ValueFromPipelineByPropertyName=$true,ParameterSetName="ViaHexadecimal")][string]$Hexadecimal,
+        [parameter(ValueFromPipelineByPropertyName=$true,ParameterSetName="ViaByteArray")][byte[]]$Bytes
+    )
+
+    Process {
+        switch ($PSCmdlet.ParameterSetName) {
+            "ViaHexadecimal" {
+                Set-FoldersByteValue -Folder $Folder -Bytes ($Hexadecimal | ConvertFrom-HexToBytes)
+            }
+            Default {
+                $Folder = $Folder | ConvertTo-FoldersCommand -Recurse
+            }
+        }
+        $HighBits = $Folder.SubFolders[0] | Get-FoldersBinValue
+        $LowBits = $Folder.SubFolders[1] | Get-FoldersBinValue
+        $Bits = "{0}{1}" -f $HighBits,$LowBits
+        $intVal = [convert]::ToInt32($Bits,2)
+        return "{0:X}" -f $intVal
+    }
+}
 Function Get-FoldersByteValue() {
     [CmdletBinding()]
     param(
